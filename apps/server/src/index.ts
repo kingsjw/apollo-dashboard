@@ -15,6 +15,7 @@ import { orchestrateQuery } from './orchestration/queryOrchestrator.js';
 
 const PORT = Number(process.env.PORT) || 4000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 // Build an executable schema for both Apollo Server and the orchestrator
 const schema = makeExecutableSchema({ typeDefs, resolvers });
@@ -39,9 +40,9 @@ const server = new ApolloServer({
 
 await server.start();
 
-app.use('/graphql', cors(), express.json(), expressMiddleware(server));
+app.use('/graphql', cors({ origin: CORS_ORIGIN }), express.json(), expressMiddleware(server));
 
-app.post('/ai-query', cors(), express.json(), async (req, res) => {
+app.post('/ai-query', cors({ origin: CORS_ORIGIN }), express.json(), async (req, res) => {
   if (!geminiProvider) {
     res.status(503).json({
       query: '',
