@@ -11,13 +11,18 @@
   },
   "dependencies": {
     "@apollo-dashboard/shared": "workspace:*",
-    "express": "^4.21.0"
+    "@apollo/server": "^5.4.0",
+    "@as-integrations/express4": "^1.1.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "graphql": "^16.13.0"
   },
   "devDependencies": {
     "@apollo-dashboard/typescript-config": "workspace:*",
-    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
