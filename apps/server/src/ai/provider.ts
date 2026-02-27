@@ -6,33 +6,20 @@
  * changing the rest of the codebase.
  */
 
-export interface GenerateQueryRequest {
-  /** The user's natural-language description of the desired query. */
-  naturalLanguage: string;
-  /** The GraphQL SDL schema string to inform the model. */
-  schema: string;
-  /** Optional previous attempt and errors for retry / correction prompts. */
-  previousAttempt?: {
-    query: string;
-    errors: string[];
-  };
-}
-
-export interface GenerateQueryResult {
-  /** The generated GraphQL query string. */
-  query: string;
-  /** The provider that generated the query (e.g. "gemini"). */
-  provider: string;
-}
-
 export interface AIProvider {
-  /** Human-readable name of the provider (e.g. "Gemini 1.5 Flash"). */
-  readonly name: string;
-
   /**
    * Generate a GraphQL query from a natural-language prompt.
+   *
    * Implementations should inject the schema into the LLM prompt and return
    * only the raw GraphQL query string (no markdown fences, etc.).
+   *
+   * @param naturalLanguage - The user's natural-language description.
+   * @param schemaSDL - The GraphQL SDL string to inform the model.
+   * @param previousErrors - Optional array of validation error messages from a prior attempt.
    */
-  generateQuery(request: GenerateQueryRequest): Promise<GenerateQueryResult>;
+  generateQuery(
+    naturalLanguage: string,
+    schemaSDL: string,
+    previousErrors?: string[],
+  ): Promise<string>;
 }

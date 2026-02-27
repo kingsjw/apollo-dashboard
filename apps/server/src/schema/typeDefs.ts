@@ -1,4 +1,5 @@
-const typeDefs = `#graphql
+/** Raw SDL string for injection into AI prompts. */
+export const schemaSDL = `
   type Product {
     id: ID!
     name: String!
@@ -66,5 +67,8 @@ const typeDefs = `#graphql
     quantity: Int!
   }
 `;
+
+/** SDL string with #graphql tag for Apollo Server / IDE syntax highlighting. */
+const typeDefs = `#graphql\n${schemaSDL}`;
 
 export default typeDefs;

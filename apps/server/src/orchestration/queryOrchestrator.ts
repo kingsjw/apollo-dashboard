@@ -1,47 +1,58 @@
 /**
- * Query Orchestrator — stub for Phase 3.
- *
- * Coordinates the generate -> validate -> (retry?) -> execute flow:
+ * Query Orchestrator — coordinates the full AI query pipeline:
  *   1. Send natural-language prompt + schema to AI provider
  *   2. Validate the generated query against the schema
  *   3. If invalid, retry up to MAX_RETRIES times with correction context
- *   4. Execute the valid query via Apollo Server
+ *   4. Execute the valid query via graphql()
  *   5. Return generated query + validation status + execution result
  */
 
 import type { AIProvider } from '../ai/provider.js';
+import { validateGeneratedQuery } from '../validation/validateQuery.js';
+import { graphql } from 'graphql';
 import type { GraphQLSchema } from 'graphql';
+import type { AIQueryResponse } from '@apollo-dashboard/shared';
 
 const MAX_RETRIES = 2;
 
-export interface OrchestratorResult {
-  /** The final generated GraphQL query string. */
-  generatedQuery: string;
-  /** Whether the query passed schema validation. */
-  isValid: boolean;
-  /** Validation errors, if any. */
-  validationErrors: string[];
-  /** Execution result data (null if query was invalid after retries). */
-  data: unknown | null;
-  /** Number of generation attempts (1 = first try succeeded). */
-  attempts: number;
-}
-
-export interface QueryOrchestratorDeps {
-  provider: AIProvider;
-  schema: GraphQLSchema;
-}
-
-/**
- * Orchestrate a natural-language query through the full pipeline.
- *
- * Stub — will be implemented in Phase 3.
- */
 export async function orchestrateQuery(
-  _naturalLanguage: string,
-  _deps: QueryOrchestratorDeps,
-): Promise<OrchestratorResult> {
-  // TODO: Phase 3 — implement generate -> validate -> retry -> execute flow
-  void MAX_RETRIES; // acknowledge the constant to avoid lint warnings
-  throw new Error('orchestrateQuery is not yet implemented. Coming in Phase 3.');
+  provider: AIProvider,
+  schema: GraphQLSchema,
+  schemaSDL: string,
+  naturalLanguage: string,
+): Promise<AIQueryResponse> {
+  let attempt = 0;
+  let queryString = '';
+  let lastErrors: string[] = [];
+
+  while (attempt <= MAX_RETRIES) {
+    queryString = await provider.generateQuery(
+      naturalLanguage,
+      schemaSDL,
+      lastErrors.length ? lastErrors : undefined,
+    );
+
+    const { valid, errors } = validateGeneratedQuery(schema, queryString);
+
+    if (valid) {
+      const result = await graphql({ schema, source: queryString });
+      return {
+        query: queryString,
+        validationStatus: attempt > 0 ? 'corrected' : 'valid',
+        result: result.data,
+        error: result.errors?.[0]?.message,
+        retryCount: attempt,
+      };
+    }
+
+    lastErrors = errors.map((e) => e.message);
+    attempt++;
+  }
+
+  return {
+    query: queryString,
+    validationStatus: 'invalid',
+    error: `Validation failed after ${MAX_RETRIES} retries: ${lastErrors.join(', ')}`,
+    retryCount: MAX_RETRIES,
+  };
 }
