@@ -1,0 +1,6 @@
+{
+  "buildCommand": "bun run build --filter=@apollo-dashboard/client",
+  "outputDirectory": "apps/client/dist",
+  "installCommand": "bun install",
+  "framework": "vite"
+}
