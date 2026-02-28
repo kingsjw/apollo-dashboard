@@ -33,6 +33,9 @@ if (GEMINI_API_KEY) {
 const app = express();
 const httpServer = http.createServer(app);
 
+// Apply CORS globally so preflight OPTIONS requests are handled
+app.use(cors({ origin: CORS_ORIGIN }));
+
 const server = new ApolloServer({
   schema,
   plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
@@ -40,9 +43,9 @@ const server = new ApolloServer({
 
 await server.start();
 
-app.use('/graphql', cors({ origin: CORS_ORIGIN }), express.json(), expressMiddleware(server));
+app.use('/graphql', express.json(), expressMiddleware(server));
 
-app.post('/ai-query', cors({ origin: CORS_ORIGIN }), express.json(), async (req, res) => {
+app.post('/ai-query', express.json(), async (req, res) => {
   if (!geminiProvider) {
     res.status(503).json({
       query: '',
