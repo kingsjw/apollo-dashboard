@@ -30,6 +30,7 @@ export const schemaSDL = `
     name: String!
     email: String!
     orders: [Order!]!
+    portfolio: Portfolio
   }
 
   type Category {
@@ -46,6 +47,39 @@ export const schemaSDL = `
     CANCELLED
   }
 
+  enum Market {
+    KOSPI
+    KOSDAQ
+  }
+
+  type Stock {
+    id: ID!
+    ticker: String!
+    name: String!
+    nameKr: String!
+    sector: String!
+    market: Market!
+    currentPrice: Float!
+  }
+
+  type StockHolding {
+    stock: Stock!
+    shares: Int!
+    avgBuyPrice: Float!
+    currentPrice: Float!
+    totalValue: Float!
+    returnRate: Float!
+    profitLoss: Float!
+  }
+
+  type Portfolio {
+    id: ID!
+    user: User!
+    holdings: [StockHolding!]!
+    totalValue: Float!
+    totalReturnRate: Float!
+  }
+
   type Query {
     products: [Product!]!
     product(id: ID!): Product
@@ -54,6 +88,10 @@ export const schemaSDL = `
     users: [User!]!
     user(id: ID!): User
     categories: [Category!]!
+    stocks: [Stock!]!
+    stock(id: ID, ticker: String): Stock
+    portfolios: [Portfolio!]!
+    portfolio(userId: ID!): Portfolio
   }
 
   type Mutation {

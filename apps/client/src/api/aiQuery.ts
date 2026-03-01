@@ -12,48 +12,15 @@ export async function fetchAIQuery(naturalLanguage: string): Promise<AIQueryResp
   return res.json();
 }
 
-export interface ConnectEndpointResponse {
-  success: boolean;
-  analysis: {
-    types: number;
-    queries: number;
-    mutations: number;
-    subscriptions: number;
-  };
-  sdl: string;
-}
-
-export async function connectEndpoint(
-  endpoint: string,
-  headers?: Record<string, string>,
-): Promise<ConnectEndpointResponse> {
-  const res = await fetch(`${API_URL}/connect-endpoint`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint, headers }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || `Connection failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function disconnectEndpoint(): Promise<{ success: boolean }> {
-  const res = await fetch(`${API_URL}/disconnect-endpoint`, { method: 'POST' });
-  if (!res.ok) throw new Error(`Disconnect failed: ${res.status}`);
-  return res.json();
-}
-
 export interface SchemaInfoResponse {
   analysis: {
-    types: number;
-    queries: number;
-    mutations: number;
-    subscriptions: number;
+    types: Array<{ name: string }>;
+    entryPoints: Array<{ name: string; type: string }>;
+    enums: Array<{ name: string }>;
+    relationships: unknown[];
   };
   llmContext: string;
-  endpoint: string | null;
+  exampleQueries: Array<{ text: string; category: string }>;
 }
 
 export async function fetchSchemaInfo(): Promise<SchemaInfoResponse> {

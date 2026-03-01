@@ -5,19 +5,19 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import type { AIQueryRequest } from '@apollo-dashboard/shared';
+import type { AIQueryRequest, ExampleQuery } from '@apollo-dashboard/shared';
 
 import typeDefs from './schema/typeDefs.js';
 import { schemaSDL } from './schema/typeDefs.js';
 import resolvers from './resolvers/index.js';
-import { GeminiProvider } from './ai/gemini.js';
+import { OpenRouterProvider } from './ai/openrouter.js';
 import { orchestrateQuery } from './orchestration/queryOrchestrator.js';
 import { analyzeSchema, generateLLMContext } from './schema/analyzer.js';
-import { introspectEndpoint } from './schema/introspector.js';
 
 const PORT = Number(process.env.PORT) || 4000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL; // optional override
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 // Build an executable schema for both Apollo Server and the orchestrator
 const schema = makeExecutableSchema({ typeDefs, resolvers });
@@ -25,22 +25,14 @@ const schema = makeExecutableSchema({ typeDefs, resolvers });
 // Analyze the schema once at startup and cache the result
 const schemaAnalysis = analyzeSchema(schema);
 
-// ---------------------------------------------------------------------------
-// Mutable state: tracks the currently active schema (built-in or external)
-// ---------------------------------------------------------------------------
-let currentSchema = schema;
-let currentSchemaSDL = schemaSDL;
-let currentSchemaAnalysis = schemaAnalysis;
-let currentEndpoint: string | null = null; // null = built-in schema
-let currentEndpointHeaders: Record<string, string> | undefined;
-
-// Warn if GEMINI_API_KEY is not set, but allow the server to start
-let geminiProvider: GeminiProvider | null = null;
-if (GEMINI_API_KEY) {
-  geminiProvider = new GeminiProvider(GEMINI_API_KEY);
+// Warn if OPENROUTER_API_KEY is not set, but allow the server to start
+let aiProvider: OpenRouterProvider | null = null;
+if (OPENROUTER_API_KEY) {
+  aiProvider = new OpenRouterProvider(OPENROUTER_API_KEY, OPENROUTER_MODEL);
+  console.log(`AI provider: OpenRouter (model: ${OPENROUTER_MODEL ?? 'google/gemini-3-flash-preview'})`);
 } else {
   console.warn(
-    'WARNING: GEMINI_API_KEY is not set. The /ai-query endpoint will return an error.',
+    'WARNING: OPENROUTER_API_KEY is not set. The /ai-query endpoint will return an error.',
   );
 }
 
@@ -60,12 +52,12 @@ await server.start();
 app.use('/graphql', express.json(), expressMiddleware(server));
 
 app.post('/ai-query', express.json(), async (req, res) => {
-  if (!geminiProvider) {
+  if (!aiProvider) {
     res.status(503).json({
       steps: [],
       query: '',
       validationStatus: 'invalid',
-      error: 'GEMINI_API_KEY is not configured. AI query generation is unavailable.',
+      error: 'OPENROUTER_API_KEY is not configured. AI query generation is unavailable.',
       retryCount: 0,
     });
     return;
@@ -86,14 +78,11 @@ app.post('/ai-query', express.json(), async (req, res) => {
     }
 
     const result = await orchestrateQuery(
-      geminiProvider,
-      currentSchema,
-      currentSchemaSDL,
-      currentSchemaAnalysis,
+      aiProvider,
+      schema,
+      schemaSDL,
+      schemaAnalysis,
       naturalLanguage,
-      currentEndpoint
-        ? { executeEndpoint: currentEndpoint, executeHeaders: currentEndpointHeaders }
-        : undefined,
     );
     res.json(result);
   } catch (err) {
@@ -110,68 +99,27 @@ app.post('/ai-query', express.json(), async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /connect-endpoint — introspect an external GraphQL API
-// ---------------------------------------------------------------------------
-app.post('/connect-endpoint', express.json(), async (req, res) => {
-  const { endpoint, headers } = req.body as {
-    endpoint: string;
-    headers?: Record<string, string>;
-  };
-
-  if (!endpoint) {
-    res.status(400).json({ error: 'Missing required field: endpoint' });
-    return;
-  }
-
-  try {
-    const introspectionResult = await introspectEndpoint({ endpoint, headers });
-    const analysis = analyzeSchema(introspectionResult.schema);
-
-    // Update the active schema state
-    currentSchema = introspectionResult.schema;
-    currentSchemaSDL = introspectionResult.sdl;
-    currentSchemaAnalysis = analysis;
-    currentEndpoint = endpoint;
-    currentEndpointHeaders = headers;
-
-    res.json({
-      success: true,
-      endpoint,
-      analysis: {
-        types: analysis.types.length,
-        relationships: analysis.relationships.length,
-        queries: analysis.entryPoints.filter((e) => e.type === 'query').length,
-        mutations: analysis.entryPoints.filter((e) => e.type === 'mutation').length,
-        enums: analysis.enums.length,
-      },
-      sdl: introspectionResult.sdl,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    res.status(500).json({ error: `Failed to connect: ${message}` });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// POST /disconnect-endpoint — revert to the built-in schema
-// ---------------------------------------------------------------------------
-app.post('/disconnect-endpoint', (_req, res) => {
-  currentSchema = schema;
-  currentSchemaSDL = schemaSDL;
-  currentSchemaAnalysis = schemaAnalysis;
-  currentEndpoint = null;
-  currentEndpointHeaders = undefined;
-  res.json({ success: true, message: 'Reverted to built-in schema' });
-});
-
-// ---------------------------------------------------------------------------
 // GET /schema-info — return current schema analysis + LLM context
 // ---------------------------------------------------------------------------
+const builtInExampleQueries: ExampleQuery[] = [
+  { text: '유저 전체 조회', category: 'E-Commerce' },
+  { text: '배송중인 주문 조회', category: 'E-Commerce' },
+  { text: '가장 비싼 상품 조회', category: 'E-Commerce' },
+  { text: '전자기기 상품 조회', category: 'E-Commerce' },
+  { text: '코스피 종목 조회', category: 'Stock Market' },
+  { text: '삼성전자 현재가 조회', category: 'Stock Market' },
+  { text: '수익률 상위 3명 조회', category: 'Stock Market' },
+  { text: '바이오 섹터 종목 조회', category: 'Stock Market' },
+  { text: 'Tom 포트폴리오 조회', category: 'Cross-Domain' },
+  { text: 'Tom 주문 내역 조회', category: 'Cross-Domain' },
+  { text: '유저별 주문금액, 수익률 조회', category: 'Cross-Domain' },
+];
+
 app.get('/schema-info', (_req, res) => {
   res.json({
-    analysis: currentSchemaAnalysis,
-    llmContext: generateLLMContext(currentSchemaAnalysis),
-    endpoint: currentEndpoint,
+    analysis: schemaAnalysis,
+    llmContext: generateLLMContext(schemaAnalysis),
+    exampleQueries: builtInExampleQueries,
   });
 });
 
